@@ -1,0 +1,25 @@
+{
+  "name": "backend",
+  "private": true,
+  "version": "1.0.0",
+  "description": "API Express de gestion de stock télécom RABYAS",
+  "scripts": {
+    "dev": "nodemon src/server.js",
+    "seed": "node src/seed.js",
+    "check": "node --check src/app.js && node --check src/server.js && node --check src/seed.js && node --check src/config/database.js && node --check src/controllers/authController.js && node --check src/controllers/userController.js && node --check src/controllers/inventoryController.js && node --check src/middleware/authMiddleware.js && node --check src/models/index.js && node --check src/models/User.js && node --check src/models/Article.js && node --check src/models/Equipement.js && node --check src/models/MouvementStock.js && node --check src/routes/authRoutes.js && node --check src/routes/userRoutes.js && node --check src/routes/articleRoutes.js && node --check src/routes/equipementRoutes.js && node --check src/routes/mouvementRoutes.js"
+  },
+  "type": "module",
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "cors": "^2.8.6",
+    "dotenv": "^18.0.8",
+    "express": "^5.3.0",
+    "helmet": "^8.3.0",
+    "jsonwebtoken": "^9.0.3",
+    "mysql2": "^3.24.6",
+    "sequelize": "^6.37.8"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.14"
+  }
+}
