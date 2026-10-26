@@ -490,6 +490,10 @@ export const receiveCommande = async (req, res) => {
             type: 'entree',
             quantite: 1,
             emplacement: equipment.emplacement,
+            depotDestination: equipment.emplacement,
+            utilisateurId: req.user.id,
+            etatAvant: equipment.etat,
+            emplacementAvant: equipment.emplacement,
             commentaire: `Réception commande #${order.id}`,
           }, { transaction });
         }
@@ -500,6 +504,8 @@ export const receiveCommande = async (req, res) => {
           type: 'entree',
           quantite,
           emplacement: receipt.emplacement?.trim() || 'Dépôt principal',
+          depotDestination: receipt.emplacement?.trim() || 'Dépôt principal',
+          utilisateurId: req.user.id,
           commentaire: `Réception commande #${order.id}`,
         }, { transaction });
       }

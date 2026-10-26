@@ -1,7 +1,7 @@
 import { DataTypes, Model } from 'sequelize';
 import sequelize from '../config/database.js';
 
-export const STOCK_MOVEMENT_TYPES = ['entree', 'sortie', 'retour'];
+export const STOCK_MOVEMENT_TYPES = ['entree', 'sortie', 'retour', 'transfert'];
 
 export class MouvementStock extends Model {}
 
@@ -18,6 +18,31 @@ MouvementStock.init(
     },
     equipementId: {
       type: DataTypes.INTEGER,
+      allowNull: true,
+    },
+    depotSource: {
+      type: DataTypes.STRING(160),
+      allowNull: true,
+    },
+    depotDestination: {
+      type: DataTypes.STRING(160),
+      allowNull: true,
+    },
+    utilisateurId: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+    },
+    mouvementInverseDeId: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      unique: { name: 'unique_mouvement_inverse', msg: 'Ce mouvement est déjà annulé' },
+    },
+    etatAvant: {
+      type: DataTypes.ENUM('neuf', 'en_service', 'en_panne', 'repare', 'reforme'),
+      allowNull: true,
+    },
+    emplacementAvant: {
+      type: DataTypes.STRING(160),
       allowNull: true,
     },
     type: {
@@ -52,7 +77,7 @@ MouvementStock.init(
     updatedAt: false,
     hooks: {
       beforeValidate: (movement) => {
-        for (const field of ['emplacement', 'commentaire']) {
+        for (const field of ['emplacement', 'depotSource', 'depotDestination', 'commentaire']) {
           if (typeof movement[field] === 'string') movement[field] = movement[field].trim();
         }
       },

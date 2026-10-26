@@ -5,6 +5,7 @@ import {
   LayoutDashboard,
   Package,
   Truck,
+  ArrowLeftRight,
   ShieldCheck,
   LogOut,
   X,
@@ -36,6 +37,12 @@ export const Sidebar = ({ isOpen, onClose }) => {
                 name: 'Fournisseurs',
                 path: '/fournisseurs',
                 icon: Truck,
+                badge: null,
+              },
+              {
+                name: 'Mouvements',
+                path: '/mouvements',
+                icon: ArrowLeftRight,
                 badge: null,
               },
             ]

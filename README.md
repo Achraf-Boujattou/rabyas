@@ -77,8 +77,16 @@ Le module est accessible aux rôles `admin` et `magasinier` depuis le menu
 - `GET /api/articles/stock/low-stock` : articles sous le seuil minimum.
 - `GET/POST /api/equipements`, `PUT/DELETE /api/equipements/:id` : équipements
   sérialisés, recherche, pagination et filtres de catégorie/état.
-- `GET/POST /api/mouvements` : historique paginé et enregistrement d’entrées,
-  sorties et retours.
+- `GET/POST /api/mouvements` : historique paginé et filtrable (type, article,
+  dépôt, jour choisi) et enregistrement immuable des entrées, sorties et transferts.
+- `POST /api/mouvements/:id/annulation` : annule un mouvement en créant un
+  mouvement inverse ; un mouvement déjà annulé ne peut pas l’être à nouveau.
+- Les transferts exigent un dépôt source et un dépôt destination différents ;
+  les quantités sont vérifiées avant de déplacer le stock. Pour les articles
+  sérialisés, le mouvement cible un numéro de série et met à jour son dépôt.
+- Les mouvements ne peuvent pas être modifiés ni supprimés. Au démarrage,
+  l’API ajoute aux tables de mouvements existantes les colonnes nécessaires aux
+  dépôts, à l’utilisateur et aux annulations inverses.
 
 Une sortie ne peut pas rendre le stock négatif. La création d’un équipement
 sérialisé enregistre son entrée initiale. Les suppressions d’équipements sont

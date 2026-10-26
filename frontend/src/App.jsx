@@ -8,6 +8,7 @@ import Profile from './pages/Profile.jsx';
 import Articles from './pages/Articles.jsx';
 import { ThemeProvider } from './context/ThemeContext.jsx';
 import Suppliers from './pages/Suppliers.jsx';
+import Movements from './pages/Movements.jsx';
 
 function App() {
   return (
@@ -61,6 +62,15 @@ function App() {
             element={
               <ProtectedRoute allowedRoles={['admin', 'magasinier']}>
                 <Suppliers />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/mouvements"
+            element={
+              <ProtectedRoute allowedRoles={['admin', 'magasinier']}>
+                <Movements />
               </ProtectedRoute>
             }
           />

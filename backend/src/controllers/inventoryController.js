@@ -1,8 +1,9 @@
-import { Op } from 'sequelize';
+import { literal, Op, QueryTypes } from 'sequelize';
 import {
   Article,
   Equipement,
   MouvementStock,
+  User,
 } from '../models/index.js';
 import { ARTICLE_CATEGORIES } from '../models/Article.js';
 import { EQUIPMENT_STATES } from '../models/Equipement.js';
@@ -23,23 +24,69 @@ const parseBoolean = (value) => {
   return null;
 };
 
+const depotStockForArticle = async (articleId, depot, transaction) => {
+  const [result] = await Article.sequelize.query(
+    `SELECT
+       SUM(
+         CASE
+           WHEN type IN ('sortie', 'transfert')
+             AND COALESCE(depot_source, emplacement, 'Dépôt principal') = :depot
+           THEN -quantite ELSE 0
+         END
+         +
+         CASE
+           WHEN type IN ('entree', 'retour', 'transfert')
+             AND COALESCE(depot_destination, CASE WHEN type IN ('entree', 'retour') THEN emplacement END, 'Dépôt principal') = :depot
+           THEN quantite ELSE 0
+         END
+       ) AS stock
+     FROM mouvements_articles
+     WHERE article_id = :articleId`,
+    {
+      replacements: { articleId, depot },
+      type: QueryTypes.SELECT,
+      transaction,
+    }
+  );
+  return Number(result?.stock || 0);
+};
+
+const equipmentStockFromMovements = async (equipmentId, transaction) => {
+  const result = await MouvementStock.findOne({
+    where: { equipementId: equipmentId },
+    attributes: [[
+      literal(
+        "SUM(CASE WHEN `type` = 'sortie' THEN -`quantite` WHEN `type` = 'transfert' THEN 0 ELSE `quantite` END)"
+      ),
+      'stock',
+    ]],
+    raw: true,
+    transaction,
+  });
+  return Number(result?.stock || 0);
+};
+
 const getStockByArticleIds = async (articleIds) => {
   const stock = new Map(articleIds.map((id) => [id, 0]));
   if (!articleIds.length) return stock;
 
   const movements = await MouvementStock.findAll({
     where: { articleId: { [Op.in]: articleIds } },
-    attributes: ['articleId', 'type', 'quantite'],
+    attributes: [
+      'articleId',
+      [
+        literal(
+          "SUM(CASE WHEN `type` = 'sortie' THEN -`quantite` WHEN `type` = 'transfert' THEN 0 ELSE `quantite` END)"
+        ),
+        'stock',
+      ],
+    ],
+    group: ['articleId'],
     raw: true,
   });
 
   for (const movement of movements) {
-    const current = stock.get(movement.articleId) || 0;
-    const quantity = Number(movement.quantite);
-    stock.set(
-      movement.articleId,
-      current + (movement.type === 'sortie' ? -quantity : quantity)
-    );
+    stock.set(movement.articleId, Number(movement.stock || 0));
   }
 
   return stock;
@@ -60,13 +107,20 @@ const attachEquipmentStock = async (equipments) => {
   if (!equipments.length) return equipments;
   const movements = await MouvementStock.findAll({
     where: { equipementId: { [Op.in]: equipments.map((equipment) => equipment.id) } },
-    attributes: ['equipementId', 'type', 'quantite'],
+    attributes: [
+      'equipementId',
+      [
+        literal(
+          "SUM(CASE WHEN `type` = 'sortie' THEN -`quantite` WHEN `type` = 'transfert' THEN 0 ELSE `quantite` END)"
+        ),
+        'stock',
+      ],
+    ],
+    group: ['equipementId'],
     raw: true,
   });
   for (const movement of movements) {
-    const current = stock.get(movement.equipementId) || 0;
-    const quantity = Number(movement.quantite);
-    stock.set(movement.equipementId, current + (movement.type === 'sortie' ? -quantity : quantity));
+    stock.set(movement.equipementId, Number(movement.stock || 0));
   }
   return equipments.map((equipment) => {
     const values = equipment.toJSON();
@@ -381,6 +435,10 @@ export const createEquipement = async (req, res) => {
         type: 'entree',
         quantite: 1,
         emplacement: equipment.emplacement,
+        depotDestination: equipment.emplacement,
+        utilisateurId: req.user.id,
+        etatAvant: equipment.etat,
+        emplacementAvant: equipment.emplacement,
         commentaire: 'Entrée initiale lors de la création de l’équipement',
       },
       { transaction }
@@ -440,15 +498,7 @@ export const updateEquipement = async (req, res) => {
         await transaction.rollback();
         return res.status(400).json({ message: 'État d’équipement invalide' });
       }
-      const history = await MouvementStock.findAll({
-        where: { equipementId: equipment.id },
-        attributes: ['type', 'quantite'],
-        transaction,
-      });
-      const equipmentStock = history.reduce(
-        (sum, movement) => sum + (movement.type === 'sortie' ? -Number(movement.quantite) : Number(movement.quantite)),
-        0
-      );
+      const equipmentStock = await equipmentStockFromMovements(equipment.id, transaction);
       const becomesUnavailable = ['en_service', 'reforme'].includes(req.body.etat);
       const becomesAvailable = ['neuf', 'repare', 'en_panne'].includes(req.body.etat);
       if (equipment.etat === 'reforme') {
@@ -463,6 +513,10 @@ export const updateEquipement = async (req, res) => {
             type: 'sortie',
             quantite: 1,
             emplacement: req.body.emplacement ?? equipment.emplacement,
+            depotSource: equipment.emplacement,
+            utilisateurId: req.user.id,
+            etatAvant: equipment.etat,
+            emplacementAvant: equipment.emplacement,
             commentaire: `Sortie automatique lors du changement d’état vers ${req.body.etat}`,
           },
           { transaction }
@@ -475,6 +529,10 @@ export const updateEquipement = async (req, res) => {
             type: 'retour',
             quantite: 1,
             emplacement: req.body.emplacement ?? equipment.emplacement,
+            depotDestination: req.body.emplacement ?? equipment.emplacement,
+            utilisateurId: req.user.id,
+            etatAvant: equipment.etat,
+            emplacementAvant: equipment.emplacement,
             commentaire: `Retour automatique lors du changement d’état vers ${req.body.etat}`,
           },
           { transaction }
@@ -524,15 +582,7 @@ export const deleteEquipement = async (req, res) => {
       await transaction.rollback();
       return res.status(404).json({ message: 'Équipement introuvable' });
     }
-    const history = await MouvementStock.findAll({
-      where: { equipementId: equipment.id },
-      attributes: ['type', 'quantite'],
-      transaction,
-    });
-    const equipmentStock = history.reduce(
-      (sum, movement) => sum + (movement.type === 'sortie' ? -Number(movement.quantite) : Number(movement.quantite)),
-      0
-    );
+    const equipmentStock = await equipmentStockFromMovements(equipment.id, transaction);
     if (equipmentStock > 0) {
       await MouvementStock.create(
         {
@@ -541,6 +591,10 @@ export const deleteEquipement = async (req, res) => {
           type: 'sortie',
           quantite: 1,
           emplacement: equipment.emplacement,
+          depotSource: equipment.emplacement,
+          utilisateurId: req.user.id,
+          etatAvant: equipment.etat,
+          emplacementAvant: equipment.emplacement,
           commentaire: 'Sortie automatique lors de l’archivage de l’équipement',
         },
         { transaction }
@@ -564,19 +618,53 @@ export const getMouvements = async (req, res) => {
     return res.status(400).json({ message: 'Pagination invalide (limite maximale : 100)' });
   }
   const where = {};
-  if (req.query.articleId) where.articleId = req.query.articleId;
+  if (req.query.articleId) {
+    const articleId = Number(req.query.articleId);
+    if (!Number.isInteger(articleId) || articleId < 1) {
+      return res.status(400).json({ message: 'Article invalide' });
+    }
+    where.articleId = articleId;
+  }
   if (req.query.type) {
     if (!STOCK_MOVEMENT_TYPES.includes(req.query.type)) {
       return res.status(400).json({ message: 'Type de mouvement invalide' });
     }
     where.type = req.query.type;
   }
+  if (req.query.depot?.trim()) {
+    const depot = req.query.depot.trim();
+    where[Op.or] = [
+      { depotSource: { [Op.like]: `%${depot}%` } },
+      { depotDestination: { [Op.like]: `%${depot}%` } },
+      { emplacement: { [Op.like]: `%${depot}%` } },
+    ];
+  }
+  if (req.query.date) {
+    if (typeof req.query.date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(req.query.date)) {
+      return res.status(400).json({ message: 'Date invalide (format attendu : AAAA-MM-JJ)' });
+    }
+    const [, year, month, day] = req.query.date.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    const start = new Date(Number(year), Number(month) - 1, Number(day));
+    if (
+      Number.isNaN(start.getTime()) ||
+      start.getFullYear() !== Number(year) ||
+      start.getMonth() !== Number(month) - 1 ||
+      start.getDate() !== Number(day)
+    ) {
+      return res.status(400).json({ message: 'Date invalide' });
+    }
+    const end = new Date(start);
+    end.setDate(end.getDate() + 1);
+    where.createdAt = { [Op.gte]: start, [Op.lt]: end };
+  }
   try {
     const result = await MouvementStock.findAndCountAll({
       where,
       include: [
         { model: Article, as: 'article', attributes: ['id', 'reference', 'designation', 'unite'] },
-        { model: Equipement, as: 'equipement', attributes: ['id', 'numeroSerie'], required: false },
+        { model: Equipement, as: 'equipement', attributes: ['id', 'numeroSerie'], required: false, paranoid: false },
+        { model: User, as: 'utilisateur', attributes: ['id', 'nom'], required: false },
+        { model: MouvementStock, as: 'annulation', attributes: ['id'], required: false },
       ],
       order: [['created_at', 'DESC']],
       limit: pagination.limit,
@@ -598,7 +686,20 @@ export const getMouvements = async (req, res) => {
 };
 
 export const createMouvement = async (req, res) => {
-  const { articleId, equipementId, type, quantite, commentaire, emplacement, etatRetour, etatSortie } = req.body;
+  const {
+    articleId,
+    equipementId,
+    type,
+    quantite,
+    commentaire,
+    emplacement,
+    depotSource: requestedSource,
+    depotDestination: requestedDestination,
+    motif,
+    etatRetour,
+    etatSortie,
+    etatEntree,
+  } = req.body;
   const quantity = Number(quantite);
   if (!STOCK_MOVEMENT_TYPES.includes(type)) {
     return res.status(400).json({ message: 'Type de mouvement invalide' });
@@ -606,23 +707,66 @@ export const createMouvement = async (req, res) => {
   if (!Number.isFinite(quantity) || quantity <= 0) {
     return res.status(400).json({ message: 'La quantité doit être supérieure à zéro' });
   }
-  if (emplacement !== undefined && (
-    typeof emplacement !== 'string' ||
-    emplacement.trim().length === 0 ||
-    emplacement.length > 160
-  )) {
-    return res.status(400).json({ message: 'Emplacement invalide (160 caractères maximum)' });
+  if (quantity > 999999999.999) {
+    return res.status(400).json({ message: 'La quantité dépasse la limite autorisée' });
+  }
+  const parsedArticleId = Number(articleId);
+  if (!Number.isInteger(parsedArticleId) || parsedArticleId < 1) {
+    return res.status(400).json({ message: 'Article invalide' });
+  }
+  if (equipementId !== undefined && (!Number.isInteger(Number(equipementId)) || Number(equipementId) < 1)) {
+    return res.status(400).json({ message: 'Équipement invalide' });
+  }
+  if (
+    (requestedSource !== undefined && (typeof requestedSource !== 'string' || !requestedSource.trim())) ||
+    (requestedDestination !== undefined && (typeof requestedDestination !== 'string' || !requestedDestination.trim()))
+  ) {
+    return res.status(400).json({ message: 'Les dépôts renseignés ne peuvent pas être vides' });
+  }
+  const depotSource = (
+    typeof requestedSource === 'string' && requestedSource.trim()
+      ? requestedSource.trim()
+      : type === 'transfert' && typeof emplacement === 'string' && emplacement.trim()
+        ? emplacement.trim()
+        : null
+  );
+  const depotDestination = (
+    typeof requestedDestination === 'string' && requestedDestination.trim()
+      ? requestedDestination.trim()
+      : ['entree', 'retour'].includes(type) && typeof emplacement === 'string' && emplacement.trim()
+        ? emplacement.trim()
+        : type === 'sortie' && typeof emplacement === 'string' && emplacement.trim()
+          ? emplacement.trim()
+          : null
+  );
+  for (const depot of [depotSource, depotDestination]) {
+    if (depot !== null && depot.length > 160) {
+      return res.status(400).json({ message: 'Un dépôt ne peut pas dépasser 160 caractères' });
+    }
+  }
+  if (type === 'transfert' && (!depotSource || !depotDestination)) {
+    return res.status(400).json({ message: 'Un transfert doit préciser le dépôt source et le dépôt destination' });
+  }
+  if (type === 'transfert' && depotSource === depotDestination) {
+    return res.status(400).json({ message: 'Les dépôts source et destination doivent être différents' });
   }
 
   const transaction = await Article.sequelize.transaction();
   try {
-    const article = await Article.findByPk(articleId, { transaction, lock: transaction.LOCK.UPDATE });
+    const article = await Article.findByPk(parsedArticleId, { transaction, lock: transaction.LOCK.UPDATE });
     if (!article) {
       await transaction.rollback();
       return res.status(404).json({ message: 'Article introuvable' });
     }
+    if (Math.round(quantity * 1000) / 1000 !== quantity) {
+      await transaction.rollback();
+      return res.status(400).json({ message: 'La quantité doit respecter une précision maximale de trois décimales' });
+    }
 
     let equipment = null;
+    let movementSource = depotSource;
+    let etatAvant = null;
+    let emplacementAvant = null;
     if (article.suiviParNumeroSerie) {
       if (!equipementId || quantity !== 1) {
         await transaction.rollback();
@@ -638,16 +782,10 @@ export const createMouvement = async (req, res) => {
         await transaction.rollback();
         return res.status(400).json({ message: 'Équipement invalide pour cet article' });
       }
-      const history = await MouvementStock.findAll({
-        where: { equipementId: equipment.id },
-        attributes: ['type', 'quantite'],
-        transaction,
-      });
-      const equipmentStock = history.reduce(
-        (sum, movement) => sum + (movement.type === 'sortie' ? -Number(movement.quantite) : Number(movement.quantite)),
-        0
-      );
-      if (type === 'sortie' && equipmentStock < 1) {
+      etatAvant = equipment.etat;
+      emplacementAvant = equipment.emplacement;
+      const equipmentStock = await equipmentStockFromMovements(equipment.id, transaction);
+      if (['sortie', 'transfert'].includes(type) && equipmentStock < 1) {
         await transaction.rollback();
         return res.status(409).json({ message: 'Cet équipement n’est pas disponible en stock' });
       }
@@ -659,49 +797,78 @@ export const createMouvement = async (req, res) => {
         await transaction.rollback();
         return res.status(409).json({ message: 'Un équipement réformé ne peut plus être mouvementé' });
       }
+      if (['sortie', 'transfert'].includes(type) && depotSource && equipment.emplacement !== depotSource) {
+        await transaction.rollback();
+        return res.status(409).json({
+          message: `Cet équipement se trouve à « ${equipment.emplacement} », pas dans le dépôt source « ${depotSource} »`,
+        });
+      }
+      if (['sortie', 'transfert'].includes(type)) movementSource = equipment.emplacement;
       if (type === 'sortie') {
         if (etatSortie !== undefined && !['en_service', 'reforme'].includes(etatSortie)) {
           await transaction.rollback();
           return res.status(400).json({ message: 'État de sortie invalide' });
         }
         equipment.etat = etatSortie || 'en_service';
+        if (depotDestination) equipment.emplacement = depotDestination;
+      } else if (type === 'transfert') {
+        equipment.emplacement = depotDestination;
       } else {
+        if (type === 'entree' && etatEntree !== undefined && !['neuf', 'en_panne', 'repare'].includes(etatEntree)) {
+          await transaction.rollback();
+          return res.status(400).json({ message: 'État d’entrée invalide' });
+        }
         if (type === 'retour' && !['neuf', 'en_panne', 'repare'].includes(etatRetour)) {
           await transaction.rollback();
           return res.status(400).json({ message: 'Indiquez un état valide pour l’équipement retourné' });
         }
-        equipment.etat = type === 'retour' ? etatRetour : 'neuf';
+        equipment.etat = type === 'retour' ? etatRetour : (etatEntree || 'neuf');
+        equipment.emplacement = depotDestination || equipment.emplacement;
       }
-      if (emplacement !== undefined) equipment.emplacement = emplacement;
       await equipment.save({ transaction });
     } else {
       if (equipementId) {
         await transaction.rollback();
         return res.status(400).json({ message: 'Cet article ne suit pas les numéros de série' });
       }
-      const movements = await MouvementStock.findAll({
-        where: { articleId: article.id },
-        attributes: ['type', 'quantite'],
-        transaction,
-      });
-      const currentStock = movements.reduce(
-        (sum, movement) => sum + (movement.type === 'sortie' ? -Number(movement.quantite) : Number(movement.quantite)),
-        0
-      );
-      if (type === 'sortie' && quantity > currentStock) {
-        await transaction.rollback();
-        return res.status(409).json({ message: `Stock insuffisant. Disponible : ${currentStock} ${article.unite}` });
+      if (['sortie', 'transfert'].includes(type)) {
+        movementSource ||= 'Dépôt principal';
+        const sourceStock = await depotStockForArticle(
+          article.id,
+          movementSource,
+          transaction
+        );
+        if (quantity > sourceStock) {
+          await transaction.rollback();
+          return res.status(409).json({
+            message: `Stock insuffisant dans le dépôt source. Disponible : ${Math.max(sourceStock, 0)} ${article.unite}`,
+          });
+        }
       }
     }
 
+    const legacyLocation = depotDestination || movementSource || (
+      typeof emplacement === 'string' && emplacement.trim()
+        ? emplacement.trim()
+        : 'Dépôt principal'
+    );
     const movement = await MouvementStock.create(
       {
         articleId: article.id,
         equipementId: equipment?.id || null,
         type,
         quantite: quantity,
-        emplacement: equipment ? equipment.emplacement : (emplacement || null),
-        commentaire: typeof commentaire === 'string' ? commentaire.trim() : '',
+        emplacement: legacyLocation,
+        depotSource: movementSource,
+        depotDestination,
+        utilisateurId: req.user.id,
+        etatAvant,
+        emplacementAvant,
+        commentaire: typeof motif === 'string'
+          ? motif.trim()
+          : typeof commentaire === 'string'
+            ? commentaire.trim()
+            : '',
       },
       { transaction }
     );
@@ -711,10 +878,162 @@ export const createMouvement = async (req, res) => {
       data: movement,
     });
   } catch (error) {
-    await transaction.rollback();
+    if (!transaction.finished) await transaction.rollback();
     const response = validationError(res, error);
     if (response) return response;
     console.error('[InventoryController] Erreur createMouvement :', error);
     return res.status(500).json({ message: 'Erreur lors de l’enregistrement du mouvement' });
+  }
+};
+
+export const cancelMouvement = async (req, res) => {
+  const transaction = await Article.sequelize.transaction();
+  try {
+    const original = await MouvementStock.findByPk(req.params.id, {
+      transaction,
+      lock: transaction.LOCK.UPDATE,
+    });
+    if (!original) {
+      await transaction.rollback();
+      return res.status(404).json({ message: 'Mouvement introuvable' });
+    }
+    if (original.mouvementInverseDeId) {
+      await transaction.rollback();
+      return res.status(409).json({ message: 'Un mouvement inverse ne peut pas être annulé directement' });
+    }
+    const existingInverse = await MouvementStock.findOne({
+      where: { mouvementInverseDeId: original.id },
+      transaction,
+      lock: transaction.LOCK.UPDATE,
+    });
+    if (existingInverse) {
+      await transaction.rollback();
+      return res.status(409).json({ message: 'Ce mouvement a déjà été annulé' });
+    }
+
+    const article = await Article.findByPk(original.articleId, {
+      transaction,
+      lock: transaction.LOCK.UPDATE,
+    });
+    if (!article) {
+      await transaction.rollback();
+      return res.status(404).json({ message: 'Article associé introuvable' });
+    }
+
+    let inverseType;
+    let depotSource = null;
+    let depotDestination = null;
+    const originalSource = original.depotSource || (
+      ['sortie', 'transfert'].includes(original.type)
+        ? original.emplacement || 'Dépôt principal'
+        : null
+    );
+    const originalDestination = original.depotDestination || (
+      ['entree', 'retour'].includes(original.type)
+        ? original.emplacement || 'Dépôt principal'
+        : null
+    );
+    if (original.type === 'transfert') {
+      inverseType = 'transfert';
+      depotSource = originalDestination;
+      depotDestination = originalSource;
+    } else if (original.type === 'entree' || original.type === 'retour') {
+      inverseType = 'sortie';
+      depotSource = originalDestination || 'Dépôt principal';
+    } else {
+      inverseType = 'entree';
+      depotDestination = originalSource || 'Dépôt principal';
+    }
+
+    let equipment = null;
+    let etatAvant = null;
+    let emplacementAvant = null;
+    if (article.suiviParNumeroSerie) {
+      if (!original.equipementId) {
+        await transaction.rollback();
+        return res.status(409).json({ message: 'Ce mouvement sérialisé ne contient pas de numéro de série à annuler' });
+      }
+      equipment = await Equipement.findByPk(original.equipementId, {
+        transaction,
+        lock: transaction.LOCK.UPDATE,
+        paranoid: false,
+      });
+      if (!equipment) {
+        await transaction.rollback();
+        return res.status(409).json({ message: 'L’équipement associé à ce mouvement est introuvable' });
+      }
+      if (equipment.deletedAt) {
+        await transaction.rollback();
+        return res.status(409).json({ message: 'Cet équipement est archivé ; son mouvement ne peut pas être annulé ici' });
+      }
+      etatAvant = equipment.etat;
+      emplacementAvant = equipment.emplacement;
+      const equipmentStock = await equipmentStockFromMovements(equipment.id, transaction);
+      if (['sortie', 'transfert'].includes(inverseType) && equipmentStock < 1) {
+        await transaction.rollback();
+        return res.status(409).json({ message: 'Annulation impossible : cet équipement n’est plus disponible en stock' });
+      }
+      if (inverseType === 'entree' && equipmentStock > 0) {
+        await transaction.rollback();
+        return res.status(409).json({ message: 'Annulation impossible : cet équipement est déjà en stock' });
+      }
+      if (
+        ['sortie', 'transfert'].includes(inverseType) &&
+        depotSource &&
+        equipment.emplacement !== depotSource
+      ) {
+        await transaction.rollback();
+        return res.status(409).json({
+          message: `Annulation impossible : l’équipement n’est plus dans le dépôt « ${depotSource} »`,
+        });
+      }
+      equipment.etat = original.etatAvant || (
+        inverseType === 'entree' ? 'neuf' : equipment.etat
+      );
+      equipment.emplacement = original.emplacementAvant || (
+        inverseType === 'transfert'
+          ? depotDestination
+          : depotSource || depotDestination || equipment.emplacement
+      );
+      await equipment.save({ transaction });
+    } else if (['sortie', 'transfert'].includes(inverseType)) {
+      const available = await depotStockForArticle(
+        article.id,
+        depotSource || 'Dépôt principal',
+        transaction
+      );
+      if (Number(original.quantite) > available) {
+        await transaction.rollback();
+        return res.status(409).json({
+          message: `Annulation impossible : stock insuffisant dans le dépôt source. Disponible : ${Math.max(available, 0)} ${article.unite}`,
+        });
+      }
+    }
+
+    const inverse = await MouvementStock.create({
+      articleId: article.id,
+      equipementId: equipment?.id || null,
+      type: inverseType,
+      quantite: original.quantite,
+      emplacement: depotDestination || depotSource || original.emplacement || 'Dépôt principal',
+      depotSource,
+      depotDestination,
+      utilisateurId: req.user.id,
+      mouvementInverseDeId: original.id,
+      etatAvant,
+      emplacementAvant,
+      commentaire: `Annulation du mouvement #${original.id}`,
+    }, { transaction });
+    await transaction.commit();
+    return res.status(201).json({
+      message: 'Mouvement annulé par la création d’un mouvement inverse',
+      data: inverse,
+    });
+  } catch (error) {
+    if (!transaction.finished) await transaction.rollback();
+    const response = validationError(res, error);
+    if (response) return response;
+    console.error('[InventoryController] Erreur cancelMouvement :', error);
+    return res.status(500).json({ message: 'Erreur lors de l’annulation du mouvement' });
   }
 };

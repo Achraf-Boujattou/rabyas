@@ -29,6 +29,24 @@ MouvementStock.belongsTo(Equipement, {
   as: 'equipement',
   foreignKey: 'equipementId',
 });
+User.hasMany(MouvementStock, {
+  as: 'mouvements',
+  foreignKey: 'utilisateurId',
+  onDelete: 'SET NULL',
+});
+MouvementStock.belongsTo(User, {
+  as: 'utilisateur',
+  foreignKey: 'utilisateurId',
+});
+MouvementStock.hasOne(MouvementStock, {
+  as: 'annulation',
+  foreignKey: 'mouvementInverseDeId',
+  onDelete: 'RESTRICT',
+});
+MouvementStock.belongsTo(MouvementStock, {
+  as: 'mouvementAnnule',
+  foreignKey: 'mouvementInverseDeId',
+});
 
 Fournisseur.hasMany(CommandeFournisseur, {
   as: 'commandes',
