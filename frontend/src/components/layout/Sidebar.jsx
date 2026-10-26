@@ -4,6 +4,7 @@ import {
   Radio,
   LayoutDashboard,
   Package,
+  Truck,
   ShieldCheck,
   LogOut,
   X,
@@ -29,6 +30,12 @@ export const Sidebar = ({ isOpen, onClose }) => {
                 name: 'Articles',
                 path: '/articles',
                 icon: Package,
+                badge: null,
+              },
+              {
+                name: 'Fournisseurs',
+                path: '/fournisseurs',
+                icon: Truck,
                 badge: null,
               },
             ]

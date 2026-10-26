@@ -14,8 +14,8 @@ rabyas/
 │   │   ├── config/                # Configuration des dépendances externes
 │   │   ├── controllers/           # Traitement des requêtes et réponses API
 │   │   ├── middleware/            # Authentification et autorisations
-│   │   ├── models/                # Utilisateurs, articles, équipements et mouvements
-│   │   ├── routes/                # Endpoints d’authentification, utilisateurs et inventaire
+│   │   ├── models/                # Utilisateurs, inventaire et fournisseurs
+│   │   ├── routes/                # Endpoints d’authentification, inventaire et fournisseurs
 │   │   └── seed.js                # Initialisation du compte administrateur
 │   ├── .env.example               # Modèle de configuration local
 │   └── package.json
@@ -90,6 +90,22 @@ Les nouvelles tables utilisent les noms `catalogue_articles`,
 anciennes tables éventuellement présentes dans la base.
 Au prochain démarrage de l’API, le `sequelize.sync()` existant crée les tables
 manquantes ; les données d’anciennes tables ne sont pas migrées automatiquement.
+
+### Fournisseurs et commandes
+
+Le module **Fournisseurs** est réservé aux rôles `admin` et `magasinier`.
+Il permet de gérer les fournisseurs, les commandes d’approvisionnement et les
+réceptions partielles ou complètes. Une réception crée ses mouvements d’entrée
+et ses équipements sérialisés dans la même transaction MySQL.
+
+- `GET/POST /api/fournisseurs` : liste paginée, recherche et création.
+- `GET/PUT/DELETE /api/fournisseurs/:id` : consultation, modification et suppression.
+- `GET/POST /api/fournisseurs/commandes` : liste paginée, recherche, filtre par
+  statut et création de commandes en brouillon.
+- `GET/PUT/DELETE /api/fournisseurs/commandes/:id` : consultation, modification
+  et suppression (seuls les brouillons sont modifiables/supprimables).
+- `POST /api/fournisseurs/commandes/:id/reception` : réception partielle ou
+  complète, avec numéros de série obligatoires pour les articles concernés.
 
 ### Interface web
 

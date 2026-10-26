@@ -3,6 +3,9 @@ import User from './User.js';
 import Article from './Article.js';
 import Equipement from './Equipement.js';
 import MouvementStock from './MouvementStock.js';
+import Fournisseur from './Fournisseur.js';
+import CommandeFournisseur from './CommandeFournisseur.js';
+import LigneCommandeFournisseur from './LigneCommandeFournisseur.js';
 
 Article.hasMany(Equipement, {
   as: 'equipements',
@@ -27,7 +30,44 @@ MouvementStock.belongsTo(Equipement, {
   foreignKey: 'equipementId',
 });
 
-export { sequelize, User, Article, Equipement, MouvementStock };
+Fournisseur.hasMany(CommandeFournisseur, {
+  as: 'commandes',
+  foreignKey: 'fournisseurId',
+  onDelete: 'RESTRICT',
+});
+CommandeFournisseur.belongsTo(Fournisseur, {
+  as: 'fournisseur',
+  foreignKey: 'fournisseurId',
+});
+CommandeFournisseur.hasMany(LigneCommandeFournisseur, {
+  as: 'lignes',
+  foreignKey: 'commandeId',
+  onDelete: 'CASCADE',
+});
+LigneCommandeFournisseur.belongsTo(CommandeFournisseur, {
+  as: 'commande',
+  foreignKey: 'commandeId',
+});
+Article.hasMany(LigneCommandeFournisseur, {
+  as: 'lignesCommande',
+  foreignKey: 'articleId',
+  onDelete: 'RESTRICT',
+});
+LigneCommandeFournisseur.belongsTo(Article, {
+  as: 'article',
+  foreignKey: 'articleId',
+});
+
+export {
+  sequelize,
+  User,
+  Article,
+  Equipement,
+  MouvementStock,
+  Fournisseur,
+  CommandeFournisseur,
+  LigneCommandeFournisseur,
+};
 
 export default {
   sequelize,
@@ -35,4 +75,7 @@ export default {
   Article,
   Equipement,
   MouvementStock,
+  Fournisseur,
+  CommandeFournisseur,
+  LigneCommandeFournisseur,
 };

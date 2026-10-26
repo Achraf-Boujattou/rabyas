@@ -7,6 +7,7 @@ import Users from './pages/Users.jsx';
 import Profile from './pages/Profile.jsx';
 import Articles from './pages/Articles.jsx';
 import { ThemeProvider } from './context/ThemeContext.jsx';
+import Suppliers from './pages/Suppliers.jsx';
 
 function App() {
   return (
@@ -51,6 +52,15 @@ function App() {
             element={
               <ProtectedRoute allowedRoles={['admin', 'magasinier']}>
                 <Articles />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/fournisseurs"
+            element={
+              <ProtectedRoute allowedRoles={['admin', 'magasinier']}>
+                <Suppliers />
               </ProtectedRoute>
             }
           />
