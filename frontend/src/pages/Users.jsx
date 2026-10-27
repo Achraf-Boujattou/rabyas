@@ -56,8 +56,6 @@ export const Users = () => {
   const [modalMode, setModalMode] = useState('create'); // 'create' | 'edit'
   const [selectedUser, setSelectedUser] = useState(null);
 
-  const [showPasswordModal, setShowPasswordModal] = useState(false);
-  const [userToReset, setUserToReset] = useState(null);
   const [newPassword, setNewPassword] = useState('');
   const [showNewPassword, setShowNewPassword] = useState(false);
 
@@ -137,6 +135,8 @@ export const Users = () => {
   const handleOpenEdit = (user) => {
     setModalMode('edit');
     setSelectedUser(user);
+    setNewPassword('');
+    setShowNewPassword(false);
     setFormData({
       nom: user.nom,
       email: user.email,
@@ -253,14 +253,6 @@ export const Users = () => {
     }
   };
 
-  // Ouverture de la modale de réinitialisation de mot de passe
-  const handleOpenResetPassword = (user) => {
-    setUserToReset(user);
-    setNewPassword('');
-    setShowNewPassword(false);
-    setShowPasswordModal(true);
-  };
-
   // Générateur de mot de passe fort aléatoire
   const generateRandomPassword = () => {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%';
@@ -272,22 +264,28 @@ export const Users = () => {
   };
 
   // Soumission réinitialisation mot de passe
-  const handleResetPasswordSubmit = async (e) => {
-    e.preventDefault();
+  const handleResetPasswordSubmit = async () => {
     if (!newPassword || newPassword.length < 6) {
-      showToast('Le mot de passe doit comporter au moins 6 caractères', 'error');
+      setFormErrors((current) => ({
+        ...current,
+        password: 'Le mot de passe doit comporter au moins 6 caractères',
+      }));
       return;
     }
 
     setIsSubmitting(true);
+    setFormErrors((current) => ({ ...current, password: '' }));
     try {
-      const res = await api.patch(`/users/${userToReset.id}/reset-password`, {
+      const res = await api.patch(`/users/${selectedUser.id}/reset-password`, {
         newPassword,
       });
       showToast(res.data?.message || 'Mot de passe réinitialisé avec succès');
-      setShowPasswordModal(false);
+      setNewPassword('');
     } catch (err) {
-      showToast(err.response?.data?.message || 'Erreur lors de la réinitialisation', 'error');
+      setFormErrors((current) => ({
+        ...current,
+        password: err.response?.data?.message || 'Erreur lors de la réinitialisation',
+      }));
     } finally {
       setIsSubmitting(false);
     }
@@ -580,15 +578,6 @@ export const Users = () => {
                               <Edit2 className="w-4 h-4" />
                             </button>
 
-                            {/* Bouton Réinitialiser Mot de passe */}
-                            <button
-                              onClick={() => handleOpenResetPassword(u)}
-                              className="p-1.5 rounded-lg text-slate-400 hover:text-amber-300 hover:bg-slate-800 transition-colors"
-                              title="Réinitialiser le mot de passe"
-                            >
-                              <KeyRound className="w-4 h-4" />
-                            </button>
-
                             {/* Bouton Activer / Désactiver */}
                             <button
                               onClick={() => handleToggleStatus(u)}
@@ -735,6 +724,68 @@ export const Users = () => {
                   </div>
                 )}
 
+                {modalMode === 'edit' && (
+                  <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-3">
+                    <div className="mb-2 flex items-center gap-2 text-xs font-semibold text-amber-200">
+                      <KeyRound className="h-4 w-4" />
+                      Réinitialiser le mot de passe
+                    </div>
+                    <div className="flex gap-2">
+                      <div className="relative min-w-0 flex-1">
+                        <Lock className="absolute left-3.5 top-3 h-4 w-4 text-slate-400" />
+                        <input
+                          type={showNewPassword ? 'text' : 'password'}
+                          placeholder="Nouveau mot de passe (6 caractères min.)"
+                          value={newPassword}
+                          onChange={(event) => {
+                            setNewPassword(event.target.value);
+                            setFormErrors((current) => ({ ...current, password: '' }));
+                          }}
+                          className="w-full rounded-xl border border-slate-800 bg-slate-950 py-2.5 pl-10 pr-10 text-xs text-white focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                          autoComplete="new-password"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowNewPassword((visible) => !visible)}
+                          className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-200"
+                          aria-label={showNewPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
+                        >
+                          {showNewPassword
+                            ? <EyeOff className="h-4 w-4" />
+                            : <Eye className="h-4 w-4" />}
+                        </button>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={generateRandomPassword}
+                        className="inline-flex shrink-0 items-center gap-1.5 rounded-xl border border-slate-700 px-3 text-[11px] font-semibold text-cyan-300 hover:bg-slate-800"
+                        title="Générer un mot de passe"
+                      >
+                        <Sparkles className="h-3.5 w-3.5" />
+                        Générer
+                      </button>
+                    </div>
+                    {formErrors.password && (
+                      <p role="alert" className="mt-1 text-[11px] text-rose-400">
+                        {formErrors.password}
+                      </p>
+                    )}
+                    <div className="mt-2 flex items-center justify-between gap-3">
+                      <p className="text-[10px] text-slate-500">
+                        Le changement est immédiat après confirmation.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={handleResetPasswordSubmit}
+                        disabled={isSubmitting || !newPassword}
+                        className="shrink-0 rounded-lg bg-amber-500/15 px-3 py-2 text-[11px] font-semibold text-amber-200 hover:bg-amber-500/25 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {isSubmitting ? 'Mise à jour...' : 'Changer le mot de passe'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 {/* Rôle & Permissions (Règle : 1 seul Administrateur dans tout le système) */}
                 <div>
                   <div className="flex items-center justify-between mb-1">
@@ -816,99 +867,7 @@ export const Users = () => {
           </div>
         )}
 
-        {/* MODALE 2 : Réinitialisation du mot de passe */}
-        {showPasswordModal && userToReset && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in">
-            <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-5">
-              <div className="flex items-center justify-between border-b border-slate-800 pb-4">
-                <div className="flex items-center space-x-2.5">
-                  <div className="p-2 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20">
-                    <KeyRound className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h2 className="text-base font-bold text-white">
-                      Réinitialiser le mot de passe
-                    </h2>
-                    <p className="text-xs text-slate-400">
-                      Pour l'utilisateur : <span className="text-cyan-400">{userToReset.nom}</span>
-                    </p>
-                  </div>
-                </div>
-
-                <button
-                  onClick={() => setShowPasswordModal(false)}
-                  className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-
-              <form onSubmit={handleResetPasswordSubmit} className="space-y-4">
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="text-xs font-semibold text-slate-300">
-                      Nouveau mot de passe
-                    </label>
-                    <button
-                      type="button"
-                      onClick={generateRandomPassword}
-                      className="text-[11px] font-semibold text-cyan-400 hover:text-cyan-300 flex items-center space-x-1"
-                    >
-                      <Sparkles className="w-3 h-3" />
-                      <span>Générer un mot de passe fort</span>
-                    </button>
-                  </div>
-
-                  <div className="relative">
-                    <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
-                    <input
-                      type={showNewPassword ? 'text' : 'password'}
-                      placeholder="Minimum 6 caractères"
-                      value={newPassword}
-                      onChange={(e) => setNewPassword(e.target.value)}
-                      className="w-full pl-10 pr-10 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:ring-1 focus:ring-cyan-500 font-mono"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowNewPassword(!showNewPassword)}
-                      className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-200"
-                    >
-                      {showNewPassword ? (
-                        <EyeOff className="w-4 h-4" />
-                      ) : (
-                        <Eye className="w-4 h-4" />
-                      )}
-                    </button>
-                  </div>
-                  <p className="mt-1 text-[11px] text-slate-500">
-                    Le mot de passe sera immédiatement haché avec Bcrypt.
-                  </p>
-                </div>
-
-                <div className="pt-4 flex items-center justify-end space-x-3 border-t border-slate-800">
-                  <button
-                    type="button"
-                    onClick={() => setShowPasswordModal(false)}
-                    className="px-4 py-2.5 rounded-xl border border-slate-800 text-xs font-semibold text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
-                  >
-                    Annuler
-                  </button>
-
-                  <button
-                    type="submit"
-                    disabled={isSubmitting || !newPassword}
-                    className="inline-flex items-center space-x-2 px-5 py-2.5 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-white rounded-xl text-xs font-semibold shadow-lg shadow-amber-500/20 disabled:opacity-50"
-                  >
-                    {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
-                    <span>Mettre à jour le mot de passe</span>
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        )}
-
-        {/* MODALE 3 : Confirmation de suppression définitive */}
+        {/* MODALE 2 : Confirmation de suppression définitive */}
         {showDeleteModal && userToDelete && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in">
             <div className="bg-slate-900 border border-rose-500/30 rounded-3xl max-w-sm w-full p-6 shadow-2xl space-y-5">
