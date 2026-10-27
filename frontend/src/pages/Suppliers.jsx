@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   Building2,
   ChevronLeft,
@@ -73,7 +74,10 @@ const formatDate = (value) =>
   value ? new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(new Date(value)) : '—';
 
 export const Suppliers = () => {
-  const [activeTab, setActiveTab] = useState('fournisseurs');
+  const [searchParams] = useSearchParams();
+  const [activeTab, setActiveTab] = useState(() =>
+    searchParams.get('tab') === 'commandes' ? 'commandes' : 'fournisseurs'
+  );
   const [suppliers, setSuppliers] = useState([]);
   const [orders, setOrders] = useState([]);
   const [articles, setArticles] = useState([]);
@@ -82,7 +86,7 @@ export const Suppliers = () => {
   const [orderPagination, setOrderPagination] = useState(null);
   const [supplierPage, setSupplierPage] = useState(1);
   const [orderPage, setOrderPage] = useState(1);
-  const [supplierSearch, setSupplierSearch] = useState('');
+  const [supplierSearch, setSupplierSearch] = useState(() => searchParams.get('search') || '');
   const [orderSearch, setOrderSearch] = useState('');
   const [orderStatus, setOrderStatus] = useState('');
   const [loading, setLoading] = useState(true);

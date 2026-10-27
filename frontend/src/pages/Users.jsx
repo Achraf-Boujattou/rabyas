@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/useAuth.js';
 import DashboardLayout from '../components/layout/DashboardLayout.jsx';
 import api from '../api/axios.js';
@@ -29,6 +30,7 @@ import {
 
 export const Users = () => {
   const { user: currentUser } = useAuth();
+  const [searchParams] = useSearchParams();
 
   const [users, setUsers] = useState([]);
   const [stats, setStats] = useState({
@@ -42,8 +44,8 @@ export const Users = () => {
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [search, setSearch] = useState('');
-  const [roleFilter, setRoleFilter] = useState('');
+  const [search, setSearch] = useState(() => searchParams.get('search') || '');
+  const [roleFilter, setRoleFilter] = useState(() => searchParams.get('role') || '');
   const [statusFilter, setStatusFilter] = useState('');
 
   // Notifications / Alertes toast

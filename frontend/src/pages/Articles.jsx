@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   AlertTriangle,
   Boxes,
@@ -131,7 +132,12 @@ const Pagination = ({ pagination, onPageChange }) => {
 };
 
 export const Articles = () => {
-  const [activeTab, setActiveTab] = useState('catalogue');
+  const [searchParams] = useSearchParams();
+  const [activeTab, setActiveTab] = useState(() =>
+    searchParams.get('tab') === 'equipements' || searchParams.has('search')
+      ? 'equipements'
+      : 'catalogue'
+  );
   const [articles, setArticles] = useState([]);
   const [articleOptions, setArticleOptions] = useState([]);
   const [equipements, setEquipements] = useState([]);
@@ -141,7 +147,7 @@ export const Articles = () => {
   const [articlePage, setArticlePage] = useState(1);
   const [equipmentPage, setEquipmentPage] = useState(1);
   const [articleSearch, setArticleSearch] = useState('');
-  const [equipmentSearch, setEquipmentSearch] = useState('');
+  const [equipmentSearch, setEquipmentSearch] = useState(() => searchParams.get('search') || '');
   const [articleCategory, setArticleCategory] = useState('');
   const [equipmentCategory, setEquipmentCategory] = useState('');
   const [equipmentState, setEquipmentState] = useState('');
