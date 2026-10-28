@@ -9,6 +9,7 @@ import Articles from './pages/Articles.jsx';
 import { ThemeProvider } from './context/ThemeContext.jsx';
 import Suppliers from './pages/Suppliers.jsx';
 import Movements from './pages/Movements.jsx';
+import Assignments from './pages/Assignments.jsx';
 
 function App() {
   return (
@@ -71,6 +72,15 @@ function App() {
             element={
               <ProtectedRoute allowedRoles={['admin', 'magasinier']}>
                 <Movements />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/affectations"
+            element={
+              <ProtectedRoute allowedRoles={['admin', 'magasinier', 'technicien']}>
+                <Assignments />
               </ProtectedRoute>
             }
           />

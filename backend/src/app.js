@@ -8,6 +8,7 @@ import articleRoutes from './routes/articleRoutes.js';
 import equipementRoutes from './routes/equipementRoutes.js';
 import mouvementRoutes from './routes/mouvementRoutes.js';
 import supplierRoutes from './routes/supplierRoutes.js';
+import assignmentRoutes from './routes/assignmentRoutes.js';
 import './models/index.js';
 
 const app = express();
@@ -70,6 +71,7 @@ app.use('/api/articles', articleRoutes);
 app.use('/api/equipements', equipementRoutes);
 app.use('/api/mouvements', mouvementRoutes);
 app.use('/api/fournisseurs', supplierRoutes);
+app.use('/api/affectations', assignmentRoutes);
 
 app.use((req, res) => {
   res.status(404).json({

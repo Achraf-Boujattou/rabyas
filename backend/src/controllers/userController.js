@@ -1,5 +1,6 @@
 import { Op } from 'sequelize';
 import User from '../models/User.js';
+import Affectation from '../models/Affectation.js';
 
 /**
  * @desc    Obtenir la liste de tous les utilisateurs (avec recherche et filtres)
@@ -361,6 +362,20 @@ export const deleteUser = async (req, res) => {
     if (user.role === 'admin') {
       return res.status(403).json({
         message: 'Le compte administrateur principal ne peut pas être supprimé',
+      });
+    }
+
+    const assignmentCount = await Affectation.count({
+      where: {
+        [Op.or]: [
+          { utilisateurId: user.id },
+          { beneficiaireUserId: user.id },
+        ],
+      },
+    });
+    if (assignmentCount > 0) {
+      return res.status(409).json({
+        message: 'Cet utilisateur est lié à l’historique des affectations et ne peut pas être supprimé. Vous pouvez désactiver son compte.',
       });
     }
 

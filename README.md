@@ -115,6 +115,27 @@ et ses équipements sérialisés dans la même transaction MySQL.
 - `POST /api/fournisseurs/commandes/:id/reception` : réception partielle ou
   complète, avec numéros de série obligatoires pour les articles concernés.
 
+### Affectations
+
+Le module **Affectations** permet aux administrateurs et magasiniers d’attribuer
+des articles à un technicien, un client ou un site, puis d’enregistrer leur
+retour complet. Les clients et sites sont identifiés par un nom libre ; les
+techniciens sont liés à leur compte utilisateur.
+
+- `GET /api/affectations` : historique paginé et filtrable par bénéficiaire,
+  statut et numéro de série. Un technicien ne reçoit que ses propres affectations.
+- `GET /api/affectations/techniciens` : liste des techniciens actifs pour le
+  formulaire d’attribution (admin et magasinier).
+- `POST /api/affectations` : crée une affectation et les mouvements de sortie
+  correspondants dans une transaction. Le stock est vérifié par dépôt et les
+  numéros de série sont requis pour les articles sérialisés.
+- `POST /api/affectations/:id/retour` : enregistre le retour complet, crée les
+  mouvements d’entrée de type retour et met à jour l’état/emplacement des
+  équipements sérialisés dans une transaction.
+
+Les administrateurs et magasiniers peuvent créer et retourner les affectations.
+Les techniciens disposent d’une vue en lecture seule **Mes affectations**.
+
 ### Interface web
 
 Dans un deuxième terminal :

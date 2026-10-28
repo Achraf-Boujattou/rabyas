@@ -6,6 +6,7 @@ import {
   Package,
   Truck,
   ArrowLeftRight,
+  ClipboardList,
   ShieldCheck,
   LogOut,
   X,
@@ -43,6 +44,22 @@ export const Sidebar = ({ isOpen, onClose }) => {
                 name: 'Mouvements',
                 path: '/mouvements',
                 icon: ArrowLeftRight,
+                badge: null,
+              },
+              {
+                name: 'Affectations',
+                path: '/affectations',
+                icon: ClipboardList,
+                badge: null,
+              },
+            ]
+          : []),
+        ...(user?.role === 'technicien'
+          ? [
+              {
+                name: 'Mes affectations',
+                path: '/affectations',
+                icon: ClipboardList,
                 badge: null,
               },
             ]

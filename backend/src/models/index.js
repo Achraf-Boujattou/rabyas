@@ -6,6 +6,8 @@ import MouvementStock from './MouvementStock.js';
 import Fournisseur from './Fournisseur.js';
 import CommandeFournisseur from './CommandeFournisseur.js';
 import LigneCommandeFournisseur from './LigneCommandeFournisseur.js';
+import Affectation from './Affectation.js';
+import LigneAffectation from './LigneAffectation.js';
 
 Article.hasMany(Equipement, {
   as: 'equipements',
@@ -76,6 +78,37 @@ LigneCommandeFournisseur.belongsTo(Article, {
   foreignKey: 'articleId',
 });
 
+User.hasMany(Affectation, {
+  as: 'affectationsCreees',
+  foreignKey: 'utilisateurId',
+  onDelete: 'RESTRICT',
+});
+Affectation.belongsTo(User, { as: 'utilisateur', foreignKey: 'utilisateurId' });
+User.hasMany(Affectation, {
+  as: 'affectationsRecues',
+  foreignKey: 'beneficiaireUserId',
+  onDelete: 'RESTRICT',
+});
+Affectation.belongsTo(User, { as: 'technicien', foreignKey: 'beneficiaireUserId' });
+Affectation.hasMany(LigneAffectation, {
+  as: 'lignes',
+  foreignKey: 'affectationId',
+  onDelete: 'RESTRICT',
+});
+LigneAffectation.belongsTo(Affectation, { as: 'affectation', foreignKey: 'affectationId' });
+Article.hasMany(LigneAffectation, {
+  as: 'lignesAffectation',
+  foreignKey: 'articleId',
+  onDelete: 'RESTRICT',
+});
+LigneAffectation.belongsTo(Article, { as: 'article', foreignKey: 'articleId' });
+Equipement.hasMany(LigneAffectation, {
+  as: 'affectations',
+  foreignKey: 'equipementId',
+  onDelete: 'RESTRICT',
+});
+LigneAffectation.belongsTo(Equipement, { as: 'equipement', foreignKey: 'equipementId' });
+
 export {
   sequelize,
   User,
@@ -85,6 +118,8 @@ export {
   Fournisseur,
   CommandeFournisseur,
   LigneCommandeFournisseur,
+  Affectation,
+  LigneAffectation,
 };
 
 export default {
@@ -96,4 +131,6 @@ export default {
   Fournisseur,
   CommandeFournisseur,
   LigneCommandeFournisseur,
+  Affectation,
+  LigneAffectation,
 };
