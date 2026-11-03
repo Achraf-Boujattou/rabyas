@@ -1,509 +1,375 @@
-import { useState } from 'react';
-import DashboardLayout from '../components/layout/DashboardLayout.jsx';
+import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import {
-  Radio,
-  Boxes,
-  Cpu,
-  ArrowLeftRight,
   AlertTriangle,
-  Plus,
-  Download,
-  ArrowUpRight,
   ArrowDownLeft,
+  ArrowLeftRight,
+  ArrowUpRight,
+  Boxes,
+  ClipboardList,
+  Package,
   RefreshCw,
-  HardHat,
-  ChevronRight,
+  ShoppingCart,
+  Wrench,
 } from 'lucide-react';
+import api from '../api/axios.js';
+import DashboardLayout from '../components/layout/DashboardLayout.jsx';
+import { useAuth } from '../context/useAuth.js';
 
-export const Dashboard = () => {
-  const [filterType, setFilterType] = useState('all');
+const EquipmentStateChart = lazy(() => import('../components/dashboard/EquipmentStateChart.jsx'));
 
-  // Données réalistes pour le suivi du stock télécom
-  const stats = [
-    {
-      title: 'Total Équipements',
-      value: '1,248',
-      change: '+14 ce mois',
-      trend: 'up',
-      icon: Cpu,
-      color: 'from-blue-600 to-cyan-500',
-      badgeColor: 'text-cyan-400 bg-cyan-500/10 border-cyan-500/20',
-    },
-    {
-      title: 'En Service sur Sites',
-      value: '892',
-      change: '71.5% du parc',
-      trend: 'up',
-      icon: Radio,
-      color: 'from-cyan-500 to-teal-500',
-      badgeColor: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20',
-    },
-    {
-      title: 'Stock Disponible',
-      value: '316',
-      change: 'Magasin central',
-      trend: 'neutral',
-      icon: Boxes,
-      color: 'from-emerald-600 to-green-500',
-      badgeColor: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20',
-    },
-    {
-      title: 'Alertes Réappro.',
-      value: '5',
-      change: 'Stock critique',
-      trend: 'down',
-      icon: AlertTriangle,
-      color: 'from-amber-600 to-rose-500',
-      badgeColor: 'text-rose-400 bg-rose-500/10 border-rose-500/20',
-    },
-  ];
+const STATE_LABELS = {
+  neuf: 'Neuf',
+  en_service: 'En service',
+  en_panne: 'En panne',
+  repare: 'Réparé',
+  reforme: 'Réformé',
+};
 
-  // Derniers mouvements de stock télécom
-  const recentMovements = [
-    {
-      id: 'MVT-2026-089',
-      equipement: 'Routeur Cisco Catalyst 8300',
-      ref: 'CISCO-CAT-8300',
-      sn: 'FOC244192K1',
-      categorie: 'Routage & Switching',
-      type: 'sortie',
-      typeLabel: 'Sortie Chantier',
-      assigneA: 'Youssef (Technicien)',
-      site: 'Site BTS Casa-Nord',
-      date: "Aujourd'hui, 14:32",
-      statut: 'Livré',
-      statutColor: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30',
-    },
-    {
-      id: 'MVT-2026-088',
-      equipement: 'Bobine Fibre 12FO Monomode 2000m',
-      ref: 'FIB-G652D-2K',
-      sn: 'LOT-9821-2026',
-      categorie: 'Fibre & Câblage',
-      type: 'sortie',
-      typeLabel: 'Sortie Déploiement',
-      assigneA: 'Karim (Technicien)',
-      site: 'Raccordement FTTH Rabat',
-      date: "Aujourd'hui, 11:15",
-      statut: 'En cours',
-      statutColor: 'bg-amber-500/15 text-amber-400 border-amber-500/30',
-    },
-    {
-      id: 'MVT-2026-087',
-      equipement: 'Antenne MIMO 5G Sectorielle 3.5GHz',
-      ref: 'ANT-5G-3500-M',
-      sn: 'ANT-9902-881',
-      categorie: 'Radio & Antennes',
-      type: 'entree',
-      typeLabel: 'Entrée Stock Fournisseur',
-      assigneA: 'Magasin Central',
-      site: 'Entrepôt Principal',
-      date: "Aujourd'hui, 09:40",
-      statut: 'Réceptionné',
-      statutColor: 'bg-blue-500/15 text-blue-400 border-blue-500/30',
-    },
-    {
-      id: 'MVT-2026-086',
-      equipement: 'Épissureuse Fibre Fujikura 90S+',
-      ref: 'FUJI-90S-PLUS',
-      sn: '90S-33109-K',
-      categorie: 'Outillage & Mesure',
-      type: 'retour',
-      typeLabel: 'Retour Intervention',
-      assigneA: 'Mehdi (Technicien)',
-      site: 'Magasin Central',
-      date: 'Hier, 17:20',
-      statut: 'Contrôlé OK',
-      statutColor: 'bg-purple-500/15 text-purple-400 border-purple-500/30',
-    },
-    {
-      id: 'MVT-2026-085',
-      equipement: 'Switch Huawei CloudEngine S5735',
-      ref: 'HW-S5735-L48T',
-      sn: '2102353YDF10',
-      categorie: 'Routage & Switching',
-      type: 'sortie',
-      typeLabel: 'Sortie Déploiement',
-      assigneA: 'Youssef (Technicien)',
-      site: 'Datacenter Régional Fès',
-      date: 'Hier, 14:05',
-      statut: 'Livré',
-      statutColor: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30',
-    },
-  ];
+const MOVEMENT_LABELS = {
+  entree: 'Entrée',
+  sortie: 'Sortie',
+  retour: 'Retour',
+  transfert: 'Transfert',
+};
 
-  const filteredMovements =
-    filterType === 'all'
-      ? recentMovements
-      : recentMovements.filter((m) => m.type === filterType);
+const formatQuantity = (value) => Number(value || 0).toLocaleString('fr-FR', {
+  maximumFractionDigits: 3,
+});
+
+const formatDate = (value) => value
+  ? new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value))
+  : '—';
+
+const requestDashboard = async () => {
+  const { data } = await api.get('/dashboard');
+  return data.data;
+};
+
+const getMovementStyle = (type) => ({
+  entree: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300',
+  sortie: 'border-amber-500/30 bg-amber-500/10 text-amber-300',
+  retour: 'border-cyan-500/30 bg-cyan-500/10 text-cyan-300',
+  transfert: 'border-blue-500/30 bg-blue-500/10 text-blue-300',
+}[type] || 'border-slate-700 bg-slate-800 text-slate-300');
+
+const Dashboard = () => {
+  const { user } = useAuth();
+  const [dashboard, setDashboard] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  const loadDashboard = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      setDashboard(await requestDashboard());
+    } catch (requestError) {
+      setError(requestError.response?.data?.message || 'Impossible de charger le tableau de bord.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    requestDashboard()
+      .then((data) => {
+        if (active) setDashboard(data);
+      })
+      .catch((requestError) => {
+        if (active) setError(requestError.response?.data?.message || 'Impossible de charger le tableau de bord.');
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const isTechnician = user?.role === 'technicien';
+  const affectations = dashboard?.affectations || [];
+  const stats = dashboard?.stats;
 
   return (
     <DashboardLayout>
-      <div className="space-y-7">
-        {/* En-tête : Titre & Actions principales */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="space-y-6">
+        <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <div className="flex items-center space-x-2.5">
-              <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
-                Tableau de Bord Télécom
-              </h1>
-              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
-                Temps Réel
-              </span>
-            </div>
-            <p className="mt-1 text-xs sm:text-sm text-slate-400">
-              Supervision des actifs, flux de stocks et suivi du matériel assigné aux techniciens
+            <p className="text-xs font-bold uppercase tracking-[0.2em] text-cyan-400">
+              RABYAS · Inventaire
+            </p>
+            <h1 className="mt-1 text-2xl font-bold text-white sm:text-3xl">
+              {isTechnician ? 'Mes affectations en cours' : 'Tableau de bord'}
+            </h1>
+            <p className="mt-1 text-sm text-slate-400">
+              {isTechnician
+                ? 'Consultez le matériel qui vous a été attribué.'
+                : 'Vue synthétique du stock, des équipements et des mouvements.'}
             </p>
           </div>
-
-          <div className="flex items-center space-x-2.5 shrink-0">
-            <button
-              type="button"
-              className="inline-flex items-center space-x-2 px-3.5 py-2.5 bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-700/80 rounded-xl text-xs font-semibold shadow-sm transition-all cursor-pointer"
-            >
-              <Download className="w-4 h-4 text-slate-400" />
-              <span className="hidden sm:inline">Exporter</span>
-            </button>
-
-            <button
-              type="button"
-              className="inline-flex items-center space-x-2 px-4 py-2.5 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white rounded-xl text-xs font-semibold shadow-lg shadow-cyan-500/25 transition-all cursor-pointer"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Nouveau Mouvement</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Bannière d'alerte Stock Critique */}
-        <div className="p-4 rounded-2xl bg-gradient-to-r from-amber-950/40 via-slate-900 to-slate-900 border border-amber-500/30 flex items-start sm:items-center justify-between gap-3 shadow-lg">
-          <div className="flex items-center space-x-3.5">
-            <div className="p-2 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-400 shrink-0">
-              <AlertTriangle className="w-5 h-5" />
-            </div>
-            <div>
-              <h2 className="text-xs sm:text-sm font-bold text-white">
-                Seuil de Stock d'Alerte Atteint (3 références)
-              </h2>
-              <p className="text-xs text-slate-400 mt-0.5">
-                Bobines Fibre 12FO, Connecteurs Optiques SC/APC et Répéteurs 4G ont atteint le stock minimum de sécurité.
-              </p>
-            </div>
-          </div>
-
           <button
             type="button"
-            className="shrink-0 px-3 py-1.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded-lg text-xs font-semibold transition-colors"
+            onClick={() => void loadDashboard()}
+            disabled={loading}
+            className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-700 bg-slate-900 px-4 py-2.5 text-sm font-semibold text-slate-200 transition hover:bg-slate-800 disabled:cursor-wait disabled:opacity-60"
           >
-            Voir les alertes
+            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+            Actualiser
           </button>
-        </div>
+        </header>
 
-        {/* 4 Cartes d'indicateurs clés (KPIs) */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
-          {stats.map((card, idx) => {
-            const Icon = card.icon;
-            return (
-              <div
-                key={idx}
-                className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 shadow-lg relative overflow-hidden group hover:border-slate-700 transition-all"
-              >
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-medium text-slate-400">
-                    {card.title}
-                  </span>
-                  <div
-                    className={`w-9 h-9 rounded-xl bg-gradient-to-tr ${card.color} flex items-center justify-center text-white shadow-md shadow-cyan-500/10 group-hover:scale-105 transition-transform`}
-                  >
-                    <Icon className="w-4 h-4" />
-                  </div>
-                </div>
-
-                <div className="mt-3 flex items-baseline space-x-2">
-                  <span className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
-                    {card.value}
-                  </span>
-                </div>
-
-                <div className="mt-2.5 flex items-center space-x-2">
-                  <span
-                    className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border ${card.badgeColor}`}
-                  >
-                    {card.change}
-                  </span>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Section Grille : Table des Mouvements + Widgets latéraux */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Colonne 1 & 2 : Tableau des Mouvements Récents */}
-          <div className="lg:col-span-2 bg-slate-900 border border-slate-800 rounded-2xl shadow-xl overflow-hidden flex flex-col">
-            {/* Header de la table avec filtres */}
-            <div className="p-5 border-b border-slate-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-slate-950/40">
-              <div className="flex items-center space-x-2.5">
-                <div className="p-2 rounded-xl bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
-                  <ArrowLeftRight className="w-4 h-4" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-bold text-white">
-                    Mouvements de Stock Récents
-                  </h3>
-                  <p className="text-[11px] text-slate-400">
-                    Traçabilité en direct des entrées, sorties et réceptions
-                  </p>
-                </div>
-              </div>
-
-              {/* Boutons de filtrage */}
-              <div className="flex items-center space-x-1.5 p-1 bg-slate-950 border border-slate-800 rounded-xl text-xs">
-                <button
-                  onClick={() => setFilterType('all')}
-                  className={`px-2.5 py-1 rounded-lg font-medium transition-all ${
-                    filterType === 'all'
-                      ? 'bg-slate-800 text-white shadow-sm'
-                      : 'text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  Tous
-                </button>
-                <button
-                  onClick={() => setFilterType('sortie')}
-                  className={`px-2.5 py-1 rounded-lg font-medium transition-all ${
-                    filterType === 'sortie'
-                      ? 'bg-amber-500/20 text-amber-300 shadow-sm'
-                      : 'text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  Sorties
-                </button>
-                <button
-                  onClick={() => setFilterType('entree')}
-                  className={`px-2.5 py-1 rounded-lg font-medium transition-all ${
-                    filterType === 'entree'
-                      ? 'bg-blue-500/20 text-blue-300 shadow-sm'
-                      : 'text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  Entrées
-                </button>
-                <button
-                  onClick={() => setFilterType('retour')}
-                  className={`px-2.5 py-1 rounded-lg font-medium transition-all ${
-                    filterType === 'retour'
-                      ? 'bg-purple-500/20 text-purple-300 shadow-sm'
-                      : 'text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  Retours
-                </button>
-              </div>
-            </div>
-
-            {/* Table des mouvements */}
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-slate-950/60 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-800/80">
-                  <tr>
-                    <th className="py-3 px-4 font-semibold">Équipement & Réf</th>
-                    <th className="py-3 px-4 font-semibold">Mouvement</th>
-                    <th className="py-3 px-4 font-semibold">Technicien / Site</th>
-                    <th className="py-3 px-4 font-semibold">Date</th>
-                    <th className="py-3 px-4 font-semibold text-right">Statut</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-800/60 text-slate-300">
-                  {filteredMovements.map((item) => (
-                    <tr
-                      key={item.id}
-                      className="hover:bg-slate-800/40 transition-colors"
-                    >
-                      <td className="py-3.5 px-4">
-                        <div className="font-semibold text-white">
-                          {item.equipement}
-                        </div>
-                        <div className="text-[11px] text-slate-400 font-mono mt-0.5">
-                          S/N : {item.sn} • {item.ref}
-                        </div>
-                      </td>
-
-                      <td className="py-3.5 px-4 whitespace-nowrap">
-                        <div className="flex items-center space-x-1.5">
-                          {item.type === 'sortie' ? (
-                            <ArrowUpRight className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                          ) : item.type === 'entree' ? (
-                            <ArrowDownLeft className="w-3.5 h-3.5 text-blue-400 shrink-0" />
-                          ) : (
-                            <RefreshCw className="w-3.5 h-3.5 text-purple-400 shrink-0" />
-                          )}
-                          <span className="font-medium text-slate-200">
-                            {item.typeLabel}
-                          </span>
-                        </div>
-                        <div className="text-[10px] text-slate-400 mt-0.5">
-                          {item.categorie}
-                        </div>
-                      </td>
-
-                      <td className="py-3.5 px-4">
-                        <div className="font-medium text-slate-200">
-                          {item.assigneA}
-                        </div>
-                        <div className="text-[11px] text-cyan-400/90 truncate max-w-[160px]">
-                          {item.site}
-                        </div>
-                      </td>
-
-                      <td className="py-3.5 px-4 whitespace-nowrap text-slate-400">
-                        {item.date}
-                      </td>
-
-                      <td className="py-3.5 px-4 text-right whitespace-nowrap">
-                        <span
-                          className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-semibold border ${item.statutColor}`}
-                        >
-                          {item.statut}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Pied de tableau */}
-            <div className="p-3 bg-slate-950/60 border-t border-slate-800 text-center">
-              <button
-                type="button"
-                className="text-xs font-semibold text-cyan-400 hover:text-cyan-300 transition-colors inline-flex items-center space-x-1"
-              >
-                <span>Consulter l'historique complet des mouvements</span>
-                <ChevronRight className="w-3.5 h-3.5" />
-              </button>
-            </div>
+        {error && (
+          <div role="alert" className="flex items-center gap-3 rounded-xl border border-rose-500/30 bg-rose-500/10 p-4 text-sm text-rose-200">
+            <AlertTriangle className="h-5 w-5 shrink-0" />
+            {error}
           </div>
+        )}
 
-          {/* Colonne 3 : Widgets latéraux (Répartition Stock & Techniciens Actifs) */}
-          <div className="space-y-6">
-            {/* Widget Répartition du Stock Télécom */}
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
-              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-                <h3 className="text-sm font-bold text-white flex items-center space-x-2">
-                  <Boxes className="w-4 h-4 text-cyan-400" />
-                  <span>Répartition du Stock</span>
-                </h3>
-                <span className="text-[11px] text-slate-400">Par Catégorie</span>
-              </div>
-
-              <div className="space-y-3.5">
-                <div>
-                  <div className="flex justify-between text-xs mb-1">
-                    <span className="text-slate-300">Fibre & Câblage Optique</span>
-                    <span className="font-semibold text-cyan-400">38%</span>
-                  </div>
-                  <div className="w-full h-2 rounded-full bg-slate-950 overflow-hidden">
-                    <div className="h-full bg-cyan-500 rounded-full w-[38%]" />
-                  </div>
-                </div>
-
-                <div>
-                  <div className="flex justify-between text-xs mb-1">
-                    <span className="text-slate-300">Routeurs & Switches</span>
-                    <span className="font-semibold text-blue-400">28%</span>
-                  </div>
-                  <div className="w-full h-2 rounded-full bg-slate-950 overflow-hidden">
-                    <div className="h-full bg-blue-500 rounded-full w-[28%]" />
-                  </div>
-                </div>
-
-                <div>
-                  <div className="flex justify-between text-xs mb-1">
-                    <span className="text-slate-300">Antennes & Radio 4G/5G</span>
-                    <span className="font-semibold text-emerald-400">20%</span>
-                  </div>
-                  <div className="w-full h-2 rounded-full bg-slate-950 overflow-hidden">
-                    <div className="h-full bg-emerald-500 rounded-full w-[20%]" />
-                  </div>
-                </div>
-
-                <div>
-                  <div className="flex justify-between text-xs mb-1">
-                    <span className="text-slate-300">Outillage & Épissureuses</span>
-                    <span className="font-semibold text-purple-400">14%</span>
-                  </div>
-                  <div className="w-full h-2 rounded-full bg-slate-950 overflow-hidden">
-                    <div className="h-full bg-purple-500 rounded-full w-[14%]" />
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Widget Techniciens Déployés sur le Terrain */}
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
-              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-                <h3 className="text-sm font-bold text-white flex items-center space-x-2">
-                  <HardHat className="w-4 h-4 text-amber-400" />
-                  <span>Techniciens en Mission</span>
-                </h3>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                  3 Actifs
-                </span>
-              </div>
-
-              <div className="space-y-3 divide-y divide-slate-800/60">
-                <div className="pt-2 flex items-center justify-between">
-                  <div className="flex items-center space-x-2.5">
-                    <div className="w-8 h-8 rounded-lg bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 flex items-center justify-center font-bold text-xs">
-                      Y
-                    </div>
-                    <div>
-                      <div className="text-xs font-semibold text-white">Youssef B.</div>
-                      <div className="text-[10px] text-slate-400">Site BTS Casa-Nord</div>
-                    </div>
-                  </div>
-                  <span className="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-300 font-medium">
-                    4 matériels
-                  </span>
-                </div>
-
-                <div className="pt-3 flex items-center justify-between">
-                  <div className="flex items-center space-x-2.5">
-                    <div className="w-8 h-8 rounded-lg bg-blue-500/10 text-blue-400 border border-blue-500/20 flex items-center justify-center font-bold text-xs">
-                      M
-                    </div>
-                    <div>
-                      <div className="text-xs font-semibold text-white">Mehdi S.</div>
-                      <div className="text-[10px] text-slate-400">FTTH Rabat Agdal</div>
-                    </div>
-                  </div>
-                  <span className="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-300 font-medium">
-                    7 matériels
-                  </span>
-                </div>
-
-                <div className="pt-3 flex items-center justify-between">
-                  <div className="flex items-center space-x-2.5">
-                    <div className="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center justify-center font-bold text-xs">
-                      K
-                    </div>
-                    <div>
-                      <div className="text-xs font-semibold text-white">Karim T.</div>
-                      <div className="text-[10px] text-slate-400">Liaison Fès Centre</div>
-                    </div>
-                  </div>
-                  <span className="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-300 font-medium">
-                    3 matériels
-                  </span>
-                </div>
-              </div>
-            </div>
+        {loading && !dashboard ? (
+          <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-12 text-center text-sm text-slate-400">
+            Chargement du tableau de bord…
           </div>
-        </div>
+        ) : isTechnician ? (
+          <TechnicianDashboard affectations={affectations} />
+        ) : (
+          <ManagerDashboard dashboard={dashboard} stats={stats} />
+        )}
       </div>
     </DashboardLayout>
   );
 };
 
+const TechnicianDashboard = ({ affectations }) => (
+  <section className="space-y-4">
+    {affectations.length === 0 ? (
+      <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-10 text-center">
+        <ClipboardList className="mx-auto h-9 w-9 text-slate-500" />
+        <h2 className="mt-3 font-semibold text-white">Aucune affectation en cours</h2>
+        <p className="mt-1 text-sm text-slate-400">Les nouvelles affectations apparaîtront ici.</p>
+      </div>
+    ) : affectations.map((assignment) => (
+      <article key={assignment.id} className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="text-xs text-slate-500">Affectation #{assignment.id}</p>
+            <h2 className="mt-1 font-semibold text-white">Matériel attribué</h2>
+          </div>
+          <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-xs font-semibold text-amber-300">
+            En cours
+          </span>
+        </div>
+        <p className="mt-2 text-xs text-slate-400">
+          Attribuée le {formatDate(assignment.dateAttribution)}
+        </p>
+        <ul className="mt-4 divide-y divide-slate-800">
+          {assignment.lignes.map((line) => (
+            <li key={line.id} className="flex flex-col gap-1 py-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="font-medium text-slate-200">{line.article?.designation || 'Article'}</p>
+                <p className="text-xs text-slate-400">
+                  {line.article?.reference} · Dépôt d’origine : {line.depotOrigine}
+                </p>
+              </div>
+              <div className="text-sm text-slate-300">
+                {line.equipement?.numeroSerie
+                  ? `N° série : ${line.equipement.numeroSerie} · ${STATE_LABELS[line.equipement.etat] || line.equipement.etat}`
+                  : `${formatQuantity(line.quantite)} ${line.article?.unite || ''}`}
+              </div>
+            </li>
+          ))}
+        </ul>
+      </article>
+    ))}
+    <Link
+      to="/affectations"
+      className="inline-flex items-center gap-2 text-sm font-semibold text-cyan-300 hover:text-cyan-200"
+    >
+      Voir l’historique de mes affectations <ClipboardList className="h-4 w-4" />
+    </Link>
+  </section>
+);
+
+const ManagerDashboard = ({ dashboard, stats }) => {
+  const stateData = dashboard?.equipmentByState || [];
+  const movements = dashboard?.recentMovements || [];
+  const lowStockArticles = dashboard?.lowStockArticles || [];
+  const cards = [
+    { label: 'Articles au catalogue', value: stats?.articleCount ?? '—', unit: 'références', icon: Package, href: '/articles', tone: 'text-cyan-300' },
+    { label: 'Quantité totale en stock', value: formatQuantity(stats?.totalStock), unit: 'toutes unités confondues', icon: Boxes, href: '/articles', tone: 'text-emerald-300' },
+    { label: 'Articles sous le seuil', value: stats?.lowStockCount ?? '—', unit: 'à réapprovisionner', icon: AlertTriangle, href: '/articles', tone: 'text-amber-300' },
+    { label: 'Commandes à recevoir', value: stats?.pendingOrdersCount ?? '—', unit: 'envoyées ou reçues partiellement', icon: ShoppingCart, href: '/fournisseurs', tone: 'text-blue-300' },
+  ];
+
+  return (
+    <div className="space-y-6">
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {cards.map(({ label, value, unit, icon: Icon, href, tone }) => (
+          <Link key={label} to={href} className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5 transition hover:border-slate-700 hover:bg-slate-900">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-sm font-medium text-slate-400">{label}</span>
+              <Icon className={`h-5 w-5 ${tone}`} />
+            </div>
+            <p className="mt-4 text-3xl font-bold text-white">{value}</p>
+            <p className="mt-1 text-xs text-slate-500">{unit}</p>
+          </Link>
+        ))}
+      </section>
+
+      <section className="grid gap-6 xl:grid-cols-2">
+        <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5">
+          <div className="flex items-center gap-3">
+            <Wrench className="h-5 w-5 text-cyan-300" />
+            <div>
+              <h2 className="font-semibold text-white">Équipements par état</h2>
+              <p className="text-xs text-slate-400">Répartition des équipements enregistrés</p>
+            </div>
+          </div>
+          {stateData.length === 0 ? (
+            <EmptyPanel text="Aucun équipement enregistré." />
+          ) : (
+            <div className="mt-4 grid items-center gap-4 sm:grid-cols-[minmax(0,1fr)_minmax(150px,0.8fr)]">
+              <div className="h-56 min-w-0">
+                <Suspense fallback={<div className="h-full animate-pulse rounded-full bg-slate-800/60" />}>
+                  <EquipmentStateChart data={stateData} />
+                </Suspense>
+              </div>
+              <ul className="space-y-3">
+                {stateData.map((item) => (
+                  <li key={item.etat} className="flex items-center justify-between gap-3 text-sm">
+                    <span className="flex items-center gap-2 text-slate-300">
+                      <span className={`h-2.5 w-2.5 rounded-full ${{
+                        neuf: 'bg-cyan-400',
+                        en_service: 'bg-blue-500',
+                        en_panne: 'bg-red-400',
+                        repare: 'bg-emerald-400',
+                        reforme: 'bg-slate-400',
+                      }[item.etat] || 'bg-slate-500'}`} />
+                      {STATE_LABELS[item.etat] || item.etat}
+                    </span>
+                    <span className="font-semibold text-white">{item.total}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+
+        <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <AlertTriangle className="h-5 w-5 text-amber-300" />
+              <div>
+                <h2 className="font-semibold text-white">Alertes de stock bas</h2>
+                <p className="text-xs text-slate-400">Articles dont le stock est inférieur au seuil minimal</p>
+              </div>
+            </div>
+            <span className="rounded-full bg-amber-500/10 px-2.5 py-1 text-xs font-semibold text-amber-300">
+              {lowStockArticles.length}
+            </span>
+          </div>
+          {lowStockArticles.length === 0 ? (
+            <EmptyPanel text="Aucune alerte de stock bas." />
+          ) : (
+            <ul className="mt-4 max-h-64 divide-y divide-slate-800 overflow-y-auto">
+              {lowStockArticles.map((article) => (
+                <li key={article.id} className="flex items-center justify-between gap-3 py-3">
+                  <div className="min-w-0">
+                    <p className="truncate font-medium text-slate-200">{article.designation}</p>
+                    <p className="text-xs text-slate-500">{article.reference}</p>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <p className="text-sm font-semibold text-amber-300">
+                      {formatQuantity(article.stockActuel)} {article.unite}
+                    </p>
+                    <p className="text-[11px] text-slate-500">
+                      Seuil : {formatQuantity(article.seuilMinimum)} {article.unite}
+                    </p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </section>
+
+      <section className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/70">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 p-5">
+          <div className="flex items-center gap-3">
+            <ArrowLeftRight className="h-5 w-5 text-cyan-300" />
+            <div>
+              <h2 className="font-semibold text-white">10 derniers mouvements</h2>
+              <p className="text-xs text-slate-400">Activité récente du stock</p>
+            </div>
+          </div>
+          <Link to="/mouvements" className="text-sm font-semibold text-cyan-300 hover:text-cyan-200">
+            Voir tous les mouvements
+          </Link>
+        </div>
+        {movements.length === 0 ? (
+          <EmptyPanel text="Aucun mouvement enregistré." />
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[700px] text-left text-sm">
+              <thead className="bg-slate-950/50 text-[11px] uppercase tracking-wider text-slate-500">
+                <tr>
+                  <th className="px-5 py-3">Article / équipement</th>
+                  <th className="px-5 py-3">Type</th>
+                  <th className="px-5 py-3">Quantité</th>
+                  <th className="px-5 py-3">Dépôt / emplacement</th>
+                  <th className="px-5 py-3">Utilisateur</th>
+                  <th className="px-5 py-3">Date</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800">
+                {movements.map((movement) => {
+                  const Icon = movement.type === 'entree'
+                    ? ArrowDownLeft
+                    : movement.type === 'sortie'
+                      ? ArrowUpRight
+                      : RefreshCw;
+                  const location = movement.depotDestination
+                    || movement.depotSource
+                    || movement.emplacement
+                    || '—';
+                  return (
+                    <tr key={movement.id} className="text-slate-300">
+                      <td className="px-5 py-3.5">
+                        <p className="font-medium text-white">{movement.article?.designation || 'Article'}</p>
+                        <p className="text-xs text-slate-500">
+                          {movement.equipement?.numeroSerie
+                            ? `N° série : ${movement.equipement.numeroSerie}`
+                            : movement.article?.reference}
+                        </p>
+                      </td>
+                      <td className="px-5 py-3.5">
+                        <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium ${getMovementStyle(movement.type)}`}>
+                          <Icon className="h-3.5 w-3.5" />
+                          {MOVEMENT_LABELS[movement.type] || movement.type}
+                        </span>
+                      </td>
+                      <td className="whitespace-nowrap px-5 py-3.5">
+                        {formatQuantity(movement.quantite)} {movement.article?.unite}
+                      </td>
+                      <td className="px-5 py-3.5">{location}</td>
+                      <td className="px-5 py-3.5">{movement.utilisateur?.nom || '—'}</td>
+                      <td className="whitespace-nowrap px-5 py-3.5 text-slate-400">{formatDate(movement.createdAt)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+    </div>
+  );
+};
+
+const EmptyPanel = ({ text }) => (
+  <p className="py-10 text-center text-sm text-slate-500">{text}</p>
+);
+
 export default Dashboard;
+export { Dashboard };

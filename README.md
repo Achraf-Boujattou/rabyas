@@ -136,6 +136,15 @@ techniciens sont liés à leur compte utilisateur.
 Les administrateurs et magasiniers peuvent créer et retourner les affectations.
 Les techniciens disposent d’une vue en lecture seule **Mes affectations**.
 
+### Tableau de bord
+
+Le tableau de bord est accessible aux trois rôles. `GET /api/dashboard` renvoie
+des statistiques MySQL agrégées pour les administrateurs et magasiniers : stock,
+articles sous seuil, derniers mouvements, états des équipements et commandes
+envoyées ou partiellement reçues. Pour un technicien, l’API renvoie uniquement
+ses affectations en cours. L’interface présente un graphique de répartition par
+état pour les gestionnaires et une vue de ses affectations pour le technicien.
+
 ### Interface web
 
 Dans un deuxième terminal :
